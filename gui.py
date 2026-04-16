@@ -79,9 +79,10 @@ class FloatIndicator(tk.Toplevel):
 
     def __init__(self, master):
         super().__init__(master)
+        # overrideredirect MUST be set before the window is mapped
+        self.overrideredirect(True)
         self.wm_attributes("-topmost", True)
         self.configure(bg=BORDER)
-        self.title("")
 
         inner = tk.Frame(self, bg=BG3, padx=12, pady=8)
         inner.pack(fill="both", expand=True, padx=1, pady=1)
@@ -102,12 +103,10 @@ class FloatIndicator(tk.Toplevel):
             w.bind("<ButtonPress-1>", self._drag_start)
             w.bind("<B1-Motion>",     self._drag_motion)
 
-        # Default position: top-right corner
-        self.update_idletasks()
+        # Force size and position after content is built
         sw = self.winfo_screenwidth()
         self.geometry(f"140x55+{sw - 160}+40")
-        self.overrideredirect(True)
-        self.update()
+        self.update_idletasks()
         self.lift()
 
     def _drag_start(self, event):
