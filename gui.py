@@ -69,19 +69,19 @@ class App(tk.Tk):
                  bg=BG, fg=MAUVE).grid(row=0, column=0, columnspan=3,
                                         sticky="w", pady=(0, 8))
 
-        tk.Label(top, text="Arquivo NMEA:", font=FONT_UI,
+        tk.Label(top, text="NMEA File:", font=FONT_UI,
                  bg=BG, fg=FG_DIM).grid(row=1, column=0, sticky="w")
         self.input_var = tk.StringVar()
         tk.Entry(top, textvariable=self.input_var, font=FONT_UI,
                  bg=BG2, fg=FG, insertbackground=FG,
                  relief="flat", bd=4, width=55).grid(
             row=1, column=1, padx=6, sticky="ew")
-        tk.Button(top, text="Abrir…", font=FONT_UI,
+        tk.Button(top, text="Open…", font=FONT_UI,
                   bg=BG3, fg=FG, activebackground=BORDER,
                   relief="flat", cursor="hand2",
                   command=self._browse_input).grid(row=1, column=2)
 
-        tk.Label(top, text="Salvar em:", font=FONT_UI,
+        tk.Label(top, text="Save to:", font=FONT_UI,
                  bg=BG, fg=FG_DIM).grid(row=2, column=0, sticky="w",
                                          pady=(6, 0))
         self.output_var = tk.StringVar()
@@ -89,14 +89,14 @@ class App(tk.Tk):
                  bg=BG2, fg=FG, insertbackground=FG,
                  relief="flat", bd=4, width=55).grid(
             row=2, column=1, padx=6, sticky="ew", pady=(6, 0))
-        tk.Button(top, text="Pasta…", font=FONT_UI,
+        tk.Button(top, text="Folder…", font=FONT_UI,
                   bg=BG3, fg=FG, activebackground=BORDER,
                   relief="flat", cursor="hand2",
                   command=self._browse_output).grid(row=2, column=2,
                                                     pady=(6, 0))
 
         self.include_invalid = tk.BooleanVar(value=False)
-        tk.Checkbutton(top, text="Incluir fixes inválidos (qualidade 0)",
+        tk.Checkbutton(top, text="Include invalid fixes (quality 0)",
                        variable=self.include_invalid,
                        font=FONT_UI, bg=BG, fg=FG_DIM,
                        selectcolor=BG2, activebackground=BG).grid(
@@ -109,20 +109,20 @@ class App(tk.Tk):
         btn_frame.pack(fill="x")
 
         self.run_btn = tk.Button(
-            btn_frame, text="▶  Processar", font=("Segoe UI", 10, "bold"),
+            btn_frame, text="▶  Process", font=("Segoe UI", 10, "bold"),
             bg=BLUE, fg=BG, activebackground=TEAL,
             relief="flat", padx=16, pady=6, cursor="hand2",
             command=self._run)
         self.run_btn.pack(side="left", padx=(0, 8))
 
         self.earth_btn = tk.Button(
-            btn_frame, text="🌍  Abrir no Google Earth", font=FONT_UI,
+            btn_frame, text="🌍  Open in Google Earth", font=FONT_UI,
             bg=BG3, fg=FG_DIM, activebackground=BORDER,
             relief="flat", padx=12, pady=6, cursor="hand2",
             state="disabled", command=self._open_kml)
         self.earth_btn.pack(side="left", padx=(0, 8))
 
-        tk.Button(btn_frame, text="Limpar", font=FONT_UI,
+        tk.Button(btn_frame, text="Clear", font=FONT_UI,
                   bg=BG3, fg=FG_DIM, activebackground=BORDER,
                   relief="flat", padx=12, pady=6, cursor="hand2",
                   command=self._clear).pack(side="left")
@@ -138,7 +138,7 @@ class App(tk.Tk):
 
         self.pps_var    = tk.StringVar(value="PPS: —")
         self.fixes_var  = tk.StringVar(value="Fixes: —")
-        self.dist_var   = tk.StringVar(value="Distância: —")
+        self.dist_var   = tk.StringVar(value="Distance: —")
         self.uptime_var = tk.StringVar(value="Uptime GPS: —")
 
         for var, col in [(self.pps_var, FG), (self.fixes_var, FG),
@@ -214,11 +214,11 @@ class App(tk.Tk):
 
         h2("HOW TO USE")
         sep()
-        body("  1. Click  Abrir…  to select an NMEA log file (.nmea / .txt / .log)")
-        body("  2. Optionally select an output folder with  Pasta…")
-        body("  3. Check  Incluir fixes inválidos  to also export quality=0 fixes")
-        body("  4. Click  ▶ Processar  to run the analysis")
-        body("  5. After processing,  🌍 Abrir no Google Earth  opens the KML track")
+        body("  1. Click  Open…  to select an NMEA log file (.nmea / .txt / .log)")
+        body("  2. Optionally select an output folder with  Folder…")
+        body("  3. Check  Include invalid fixes  to also export quality=0 fixes")
+        body("  4. Click  ▶ Process  to run the analysis")
+        body("  5. After processing,  🌍 Open in Google Earth  opens the KML track")
         blank()
 
         h2("FILE INFORMATION")
@@ -330,7 +330,7 @@ class App(tk.Tk):
 
     def _browse_input(self):
         path = filedialog.askopenfilename(
-            title="Selecione o arquivo NMEA",
+            title="Select NMEA file",
             filetypes=[("NMEA files", "*.nmea *.txt *.log"), ("All files", "*.*")])
         if path:
             self.input_var.set(path)
@@ -339,7 +339,7 @@ class App(tk.Tk):
                 self.output_var.set(str(Path(path).parent))
 
     def _browse_output(self):
-        path = filedialog.askdirectory(title="Selecione a pasta de saída")
+        path = filedialog.askdirectory(title="Select output folder")
         if path:
             self.output_var.set(path)
 
@@ -347,7 +347,7 @@ class App(tk.Tk):
         self._set_text("")
         self.pps_var.set("PPS: —")
         self.fixes_var.set("Fixes: —")
-        self.dist_var.set("Distância: —")
+        self.dist_var.set("Distance: —")
         self.uptime_var.set("Uptime GPS: —")
         self._kml_path = None
         self.earth_btn.configure(state="disabled", fg=FG_DIM)
@@ -357,20 +357,20 @@ class App(tk.Tk):
             return
         input_path = self.input_var.get().strip()
         if not input_path:
-            messagebox.showwarning("Atenção", "Selecione um arquivo NMEA primeiro.")
+            messagebox.showwarning("Warning", "Please select an NMEA file first.")
             return
         p = Path(input_path)
         if not p.exists():
-            messagebox.showerror("Erro", f"Arquivo não encontrado:\n{p}")
+            messagebox.showerror("Error", f"File not found:\n{p}")
             return
 
         out_str = self.output_var.get().strip()
         out_dir = Path(out_str).resolve() if out_str else p.parent.resolve()
 
         self._running = True
-        self.run_btn.configure(state="disabled", text="Processando…")
+        self.run_btn.configure(state="disabled", text="Processing…")
         self._clear()
-        self._append("Processando: ", "dim")
+        self._append("Processing: ", "dim")
         self._append(str(p) + "\n", "value")
 
         def worker():
@@ -409,7 +409,7 @@ class App(tk.Tk):
 
             except Exception as e:
                 msg = str(e)
-                self.after(0, lambda: self._append(f"\nErro: {msg}\n", "fail"))
+                self.after(0, lambda: self._append(f"\nError: {msg}\n", "fail"))
             finally:
                 self.after(0, self._done)
 
@@ -417,16 +417,16 @@ class App(tk.Tk):
 
     def _done(self):
         self._running = False
-        self.run_btn.configure(state="normal", text="▶  Processar")
+        self.run_btn.configure(state="normal", text="▶  Process")
 
     def _open_kml(self):
         if self._kml_path and self._kml_path.exists():
             try:
                 subprocess.Popen(["xdg-open", str(self._kml_path)])
             except Exception as e:
-                messagebox.showerror("Erro", f"Não foi possível abrir o KML:\n{e}")
+                messagebox.showerror("Error", f"Could not open KML file:\n{e}")
         else:
-            messagebox.showinfo("Aviso", "Arquivo KML não encontrado.\nProcesse um arquivo primeiro.")
+            messagebox.showinfo("Warning", "KML file not found.\nPlease process a file first.")
 
     # -----------------------------------------------------------------------
     # Report display
@@ -458,7 +458,7 @@ class App(tk.Tk):
         self.pps_var.set(f"PPS: {pps}")
         self.fixes_var.set(f"Fixes: {stats.get('valid_fixes', 0)}")
         dist = stats.get("distance_nm", 0.0)
-        self.dist_var.set(f"Distância: {dist:.3f} nm")
+        self.dist_var.set(f"Distance: {dist:.3f} nm")
         self.uptime_var.set(f"Uptime GPS: {uptime:.1f}%")
 
         # Update PPS label colour
