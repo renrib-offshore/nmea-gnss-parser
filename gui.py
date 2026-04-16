@@ -90,11 +90,11 @@ class FloatIndicator(tk.Toplevel):
         self._detail_var = tk.StringVar(value="no data")
 
         self._status_lbl = tk.Label(inner, textvariable=self._status_var,
-                                    font=FONT_BOLD, bg=BG3, fg=FG_DIM)
+                                    font=FONT_BOLD, bg=BG3, fg=FG)
         self._status_lbl.pack()
 
         self._detail_lbl = tk.Label(inner, textvariable=self._detail_var,
-                                    font=("Segoe UI", 8), bg=BG3, fg=FG_DIM)
+                                    font=("Segoe UI", 8), bg=BG3, fg=FG)
         self._detail_lbl.pack()
 
         # Bind drag to all child widgets
@@ -107,6 +107,8 @@ class FloatIndicator(tk.Toplevel):
         sw = self.winfo_screenwidth()
         self.geometry(f"140x55+{sw - 160}+40")
         self.overrideredirect(True)
+        self.update()
+        self.lift()
 
     def _drag_start(self, event):
         self._dx = event.x_root - self.winfo_x()
