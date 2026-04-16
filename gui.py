@@ -80,13 +80,13 @@ class FloatIndicator(tk.Toplevel):
 
     def __init__(self, master):
         super().__init__(master)
+        self.title("PPS Monitor")
         self.wm_attributes("-topmost", True)
         self.resizable(False, False)
-        self.configure(bg=BORDER)
-        self.title("")
+        self.configure(bg=BG3)
 
-        inner = tk.Frame(self, bg=BG3, padx=12, pady=8)
-        inner.pack(fill="both", expand=True, padx=1, pady=1)
+        inner = tk.Frame(self, bg=BG3, padx=14, pady=10)
+        inner.pack(fill="both", expand=True)
 
         self._status_var = tk.StringVar(value="● INACTIVE")
         self._detail_var = tk.StringVar(value="no data")
@@ -96,31 +96,15 @@ class FloatIndicator(tk.Toplevel):
         self._status_lbl.pack()
 
         self._detail_lbl = tk.Label(inner, textvariable=self._detail_var,
-                                    font=("Segoe UI", 8), bg=BG3, fg=FG)
+                                    font=("Segoe UI", 9), bg=BG3, fg=FG)
         self._detail_lbl.pack()
-
-        for w in [self, inner, self._status_lbl, self._detail_lbl]:
-            w.bind("<ButtonPress-1>", self._drag_start)
-            w.bind("<B1-Motion>",     self._drag_motion)
 
         # Position near the top-right of the parent window
         master.update_idletasks()
-        x = master.winfo_x() + master.winfo_width() - 150
+        x = master.winfo_x() + master.winfo_width() - 160
         y = master.winfo_y() + 10
-        self.geometry(f"140x60+{x}+{y}")
-        # Apply borderless after window is fully mapped
-        self.after(100, self._apply_borderless)
+        self.geometry(f"150x65+{x}+{y}")
 
-    def _apply_borderless(self):
-        self.overrideredirect(True)
-        self.lift()
-
-    def _drag_start(self, event):
-        self._dx = event.x_root - self.winfo_x()
-        self._dy = event.y_root - self.winfo_y()
-
-    def _drag_motion(self, event):
-        self.geometry(f"+{event.x_root - self._dx}+{event.y_root - self._dy}")
 
     def update_status(self, pps: str, quality: int, satellites: int):
         colors = {"LOCKED": GREEN, "DEGRADED": YELLOW, "UNLOCKED": RED}
