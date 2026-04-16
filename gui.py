@@ -79,9 +79,9 @@ class FloatIndicator(tk.Toplevel):
 
     def __init__(self, master):
         super().__init__(master)
-        self.overrideredirect(True)
         self.wm_attributes("-topmost", True)
         self.configure(bg=BORDER)
+        self.title("")
 
         inner = tk.Frame(self, bg=BG3, padx=12, pady=8)
         inner.pack(fill="both", expand=True, padx=1, pady=1)
@@ -105,7 +105,8 @@ class FloatIndicator(tk.Toplevel):
         # Default position: top-right corner
         self.update_idletasks()
         sw = self.winfo_screenwidth()
-        self.geometry(f"+{sw - 160}+40")
+        self.geometry(f"140x55+{sw - 160}+40")
+        self.overrideredirect(True)
 
     def _drag_start(self, event):
         self._dx = event.x_root - self.winfo_x()
