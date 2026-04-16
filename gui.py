@@ -80,10 +80,10 @@ class FloatIndicator(tk.Toplevel):
 
     def __init__(self, master):
         super().__init__(master)
-        self.withdraw()  # hide before any configuration
-        self.overrideredirect(True)
         self.wm_attributes("-topmost", True)
+        self.resizable(False, False)
         self.configure(bg=BORDER)
+        self.title("")
 
         inner = tk.Frame(self, bg=BG3, padx=12, pady=8)
         inner.pack(fill="both", expand=True, padx=1, pady=1)
@@ -103,13 +103,16 @@ class FloatIndicator(tk.Toplevel):
             w.bind("<ButtonPress-1>", self._drag_start)
             w.bind("<B1-Motion>",     self._drag_motion)
 
-        # Position near the top-right of the parent window (works with multi-monitor)
+        # Position near the top-right of the parent window
         master.update_idletasks()
         x = master.winfo_x() + master.winfo_width() - 150
         y = master.winfo_y() + 10
-        self.geometry(f"140x55+{x}+{y}")
-        self.update_idletasks()
-        self.deiconify()
+        self.geometry(f"140x60+{x}+{y}")
+        # Apply borderless after window is fully mapped
+        self.after(100, self._apply_borderless)
+
+    def _apply_borderless(self):
+        self.overrideredirect(True)
         self.lift()
 
     def _drag_start(self, event):
