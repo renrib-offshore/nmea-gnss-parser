@@ -206,6 +206,7 @@ class App(tk.Tk):
         self._live_satellites: int = 0
         self._last_zda_time: float = 0.0
         self._last_gga_time: float = 0.0
+        self._logged_gap_count: int = 0   # timing events already written to live log
         self._float_win: FloatIndicator | None = None
 
         self._build_ui()
@@ -417,10 +418,11 @@ class App(tk.Tk):
         self.lv_hdop,  _             = field(nav, "HDOP")
 
         tim = section("TIMING / PPS", 1, 0)
-        self.lv_pps,    self._lv_pps_lbl = field(tim, "PPS status")
-        self.lv_avgdev, _                 = field(tim, "Avg deviation")
-        self.lv_maxdev, _                 = field(tim, "Max deviation")
-        self.lv_zda,    _                 = field(tim, "ZDA received")
+        self.lv_pps,      self._lv_pps_lbl = field(tim, "PPS status")
+        self.lv_avgdev,   _                 = field(tim, "Avg deviation")
+        self.lv_maxdev,   _                 = field(tim, "Max deviation")
+        self.lv_zda,      _                 = field(tim, "ZDA received")
+        self.lv_zda_time, _                 = field(tim, "NMEA time")
 
         ses = section("SESSION", 1, 1)
         self.lv_uptime,   _          = field(ses, "Uptime")
@@ -647,6 +649,7 @@ class App(tk.Tk):
             self._close_log()
         self._last_zda_time = 0.0
         self._last_gga_time = 0.0
+        self._logged_gap_count = 0
         self.conn_btn.configure(text="⬤  Connect", bg=GREEN, fg=BG)
         self._live_log_event(f"[{_now()}]  Disconnected.")
         # Reset live display and floating indicator
@@ -747,6 +750,7 @@ class App(tk.Tk):
                 if ts:
                     self._last_zda_time = time.time()
                     self._live_zda_buf.append(ZDAEvent(timestamp=ts))
+                    self.lv_zda_time.set(ts.strftime("%H:%M:%S UTC"))
                     self._update_pps_live()
             except (IndexError, ValueError):
                 pass
@@ -806,6 +810,21 @@ class App(tk.Tk):
         self.lv_maxdev.set(f"{maxdev:.2f} ms")
         self.lv_zda.set(str(zcount))
         self.lv_uptime.set(f"{uptime:.1f}%")
+
+        # Log new timing events (gaps / jumps) that weren't logged yet
+        gaps = timing.get("gaps", [])
+        kind_labels = {
+            "gap":           ("[GAP]",      "warn"),
+            "forward_jump":  ("[JUMP FWD]", "warn"),
+            "backward_jump": ("[JUMP BWD]", "warn"),
+        }
+        for gap in gaps[self._logged_gap_count:]:
+            label, tag = kind_labels.get(gap.kind, (f"[{gap.kind.upper()}]", ""))
+            start_s = gap.start.strftime("%H:%M:%S")
+            end_s   = gap.end.strftime("%H:%M:%S")
+            msg = f"[{_now()}]  {label}  {start_s} → {end_s}  ({gap.duration_s:.1f}s)"
+            self._live_log_event(msg)
+        self._logged_gap_count = len(gaps)
 
         if self._float_win and self._float_win.winfo_exists():
             now = time.time()
