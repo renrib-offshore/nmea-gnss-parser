@@ -767,7 +767,10 @@ class App(tk.Tk):
 
         self._live_quality    = q
         self._live_satellites = sats
-        self._last_gga_time   = time.time()
+        # Only refresh the signal timer on a valid fix (quality > 0).
+        # quality=0 means no satellite lock — signal loss condition.
+        if q > 0:
+            self._last_gga_time = time.time()
 
         self.lv_lat.set(f"{lat:.8f}°")
         self.lv_lon.set(f"{lon:.8f}°")
