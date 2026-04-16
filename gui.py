@@ -79,7 +79,7 @@ class FloatIndicator(tk.Toplevel):
 
     def __init__(self, master):
         super().__init__(master)
-        # overrideredirect MUST be set before the window is mapped
+        self.withdraw()  # hide before any configuration
         self.overrideredirect(True)
         self.wm_attributes("-topmost", True)
         self.configure(bg=BORDER)
@@ -98,15 +98,14 @@ class FloatIndicator(tk.Toplevel):
                                     font=("Segoe UI", 8), bg=BG3, fg=FG)
         self._detail_lbl.pack()
 
-        # Bind drag to all child widgets
         for w in [self, inner, self._status_lbl, self._detail_lbl]:
             w.bind("<ButtonPress-1>", self._drag_start)
             w.bind("<B1-Motion>",     self._drag_motion)
 
-        # Force size and position after content is built
         sw = self.winfo_screenwidth()
         self.geometry(f"140x55+{sw - 160}+40")
         self.update_idletasks()
+        self.deiconify()  # show only after everything is configured
         self.lift()
 
     def _drag_start(self, event):
