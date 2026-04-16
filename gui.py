@@ -104,7 +104,13 @@ class FloatIndicator(tk.Toplevel):
         x = master.winfo_x() + master.winfo_width() - 160
         y = master.winfo_y() + 10
         self.geometry(f"150x65+{x}+{y}")
+        self._keep_on_top()
 
+
+    def _keep_on_top(self):
+        if self.winfo_exists():
+            self.lift()
+            self.after(500, self._keep_on_top)
 
     def update_status(self, pps: str, quality: int, satellites: int):
         colors = {"LOCKED": GREEN, "DEGRADED": YELLOW, "UNLOCKED": RED}
