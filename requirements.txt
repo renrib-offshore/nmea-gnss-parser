@@ -1,0 +1,2 @@
+# No third-party dependencies — uses only Python 3.10+ standard library.
+# Install Python 3.10+ if needed: https://www.python.org/downloads/
