@@ -76,41 +76,74 @@ def _now() -> str:
 # ---------------------------------------------------------------------------
 
 class FloatIndicator(tk.Toplevel):
-    """Small draggable always-on-top PPS status indicator."""
+    """Small draggable borderless always-on-top PPS status indicator."""
 
-    def __init__(self, master):
+    def __init__(self, master, on_close=None):
         super().__init__(master)
-        self.title("PPS Monitor")
-        self.wm_attributes("-topmost", True)
-        self.resizable(False, False)
+        # overrideredirect MUST be the very first call — before any widgets or geometry
+        self.overrideredirect(True)
         self.configure(bg=BG3)
 
-        inner = tk.Frame(self, bg=BG3, padx=14, pady=10)
+        self._on_close_cb = on_close
+        self._drag_x = 0
+        self._drag_y = 0
+
+        # ── Drag/title bar ──────────────────────────────────────────────────
+        bar = tk.Frame(self, bg=BORDER, height=18, cursor="fleur")
+        bar.pack(fill="x")
+        bar.bind("<ButtonPress-1>", self._drag_start)
+        bar.bind("<B1-Motion>",     self._drag_move)
+
+        tk.Label(bar, text="PPS Monitor", font=("Segoe UI", 8),
+                 bg=BORDER, fg=FG_DIM).pack(side="left", padx=6)
+        tk.Button(bar, text="×", font=("Segoe UI", 9, "bold"),
+                  bg=BORDER, fg=FG_DIM, activebackground=RED,
+                  relief="flat", bd=0, padx=5, cursor="hand2",
+                  command=self._close_btn).pack(side="right")
+
+        # ── Content ─────────────────────────────────────────────────────────
+        inner = tk.Frame(self, bg=BG3, padx=14, pady=8)
         inner.pack(fill="both", expand=True)
+        inner.bind("<ButtonPress-1>", self._drag_start)
+        inner.bind("<B1-Motion>",     self._drag_move)
 
         self._status_var = tk.StringVar(value="● INACTIVE")
         self._detail_var = tk.StringVar(value="no data")
 
         self._status_lbl = tk.Label(inner, textvariable=self._status_var,
-                                    font=FONT_BOLD, bg=BG3, fg=FG)
-        self._status_lbl.pack()
+                                    font=FONT_BOLD, bg=BG3, fg=FG, anchor="w")
+        self._status_lbl.pack(fill="x")
+        self._status_lbl.bind("<ButtonPress-1>", self._drag_start)
+        self._status_lbl.bind("<B1-Motion>",     self._drag_move)
 
         self._detail_lbl = tk.Label(inner, textvariable=self._detail_var,
-                                    font=("Segoe UI", 9), bg=BG3, fg=FG)
-        self._detail_lbl.pack()
+                                    font=("Segoe UI", 9), bg=BG3, fg=FG, anchor="w")
+        self._detail_lbl.pack(fill="x")
+        self._detail_lbl.bind("<ButtonPress-1>", self._drag_start)
+        self._detail_lbl.bind("<B1-Motion>",     self._drag_move)
 
-        # Position near the top-right of the parent window
+        # ── Position relative to parent window ──────────────────────────────
         master.update_idletasks()
-        x = master.winfo_x() + master.winfo_width() - 160
+        x = master.winfo_x() + master.winfo_width() - 165
         y = master.winfo_y() + 10
-        self.geometry(f"150x65+{x}+{y}")
-        self._keep_on_top()
+        self.geometry(f"155x82+{x}+{y}")
+        self.update_idletasks()   # ensure content is rendered before showing
 
+    # ── Drag ────────────────────────────────────────────────────────────────
 
-    def _keep_on_top(self):
-        if self.winfo_exists():
-            self.lift()
-            self.after(500, self._keep_on_top)
+    def _drag_start(self, event):
+        self._drag_x = event.x_root - self.winfo_x()
+        self._drag_y = event.y_root - self.winfo_y()
+
+    def _drag_move(self, event):
+        self.geometry(f"+{event.x_root - self._drag_x}+{event.y_root - self._drag_y}")
+
+    def _close_btn(self):
+        if self._on_close_cb:
+            self._on_close_cb()
+        self.destroy()
+
+    # ── Status update ────────────────────────────────────────────────────────
 
     def update_status(self, pps: str, quality: int, satellites: int):
         colors = {"LOCKED": GREEN, "DEGRADED": YELLOW, "UNLOCKED": RED}
@@ -775,11 +808,16 @@ class App(tk.Tk):
     def _toggle_float(self):
         if self.show_float_var.get():
             if self._float_win is None or not self._float_win.winfo_exists():
-                self._float_win = FloatIndicator(self)
+                self._float_win = FloatIndicator(self, on_close=self._on_float_closed)
         else:
             if self._float_win and self._float_win.winfo_exists():
                 self._float_win.destroy()
             self._float_win = None
+
+    def _on_float_closed(self):
+        """Called when user closes the floating indicator via the × button."""
+        self.show_float_var.set(False)
+        self._float_win = None
 
     # -----------------------------------------------------------------------
     # Live Monitor — status log
