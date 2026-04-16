@@ -102,10 +102,13 @@ class FloatIndicator(tk.Toplevel):
             w.bind("<ButtonPress-1>", self._drag_start)
             w.bind("<B1-Motion>",     self._drag_motion)
 
-        sw = self.winfo_screenwidth()
-        self.geometry(f"140x55+{sw - 160}+40")
+        # Position near the top-right of the parent window (works with multi-monitor)
+        master.update_idletasks()
+        x = master.winfo_x() + master.winfo_width() - 150
+        y = master.winfo_y() + 10
+        self.geometry(f"140x55+{x}+{y}")
         self.update_idletasks()
-        self.deiconify()  # show only after everything is configured
+        self.deiconify()
         self.lift()
 
     def _drag_start(self, event):
