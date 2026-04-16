@@ -127,6 +127,11 @@ class App(tk.Tk):
                   relief="flat", padx=12, pady=6, cursor="hand2",
                   command=self._clear).pack(side="left")
 
+        tk.Button(btn_frame, text="?  Help", font=FONT_UI,
+                  bg=BG3, fg=MAUVE, activebackground=BORDER,
+                  relief="flat", padx=12, pady=6, cursor="hand2",
+                  command=self._show_help).pack(side="right")
+
         # ── Status bar ──────────────────────────────────────────────────────
         status_frame = tk.Frame(self, bg=BG2, padx=12, pady=6)
         status_frame.pack(fill="x")
@@ -168,6 +173,160 @@ class App(tk.Tk):
     # -----------------------------------------------------------------------
     # Actions
     # -----------------------------------------------------------------------
+
+    def _show_help(self):
+        win = tk.Toplevel(self)
+        win.title("NMEA/GNSS Parser — Help")
+        win.configure(bg=BG)
+        win.resizable(True, True)
+        win.minsize(640, 500)
+
+        frame = tk.Frame(win, bg=BG, padx=14, pady=10)
+        frame.pack(fill="both", expand=True)
+
+        txt = tk.Text(frame, font=FONT_MONO, bg=BG2, fg=FG,
+                      relief="flat", bd=0, wrap="word", state="normal")
+        txt.pack(side="left", fill="both", expand=True)
+
+        sb = ttk.Scrollbar(frame, orient="vertical", command=txt.yview)
+        sb.pack(side="right", fill="y")
+        txt.configure(yscrollcommand=sb.set)
+
+        txt.tag_configure("h1",    foreground=MAUVE, font=("Segoe UI", 11, "bold"))
+        txt.tag_configure("h2",    foreground=BLUE,  font=("Segoe UI", 10, "bold"))
+        txt.tag_configure("key",   foreground=TEAL)
+        txt.tag_configure("ok",    foreground=GREEN)
+        txt.tag_configure("warn",  foreground=YELLOW)
+        txt.tag_configure("fail",  foreground=RED)
+        txt.tag_configure("dim",   foreground=FG_DIM)
+
+        def h1(t):  txt.insert("end", t + "\n", "h1")
+        def h2(t):  txt.insert("end", t + "\n", "h2")
+        def sep():  txt.insert("end", "─" * 60 + "\n", "dim")
+        def line(label, desc, tag="key"):
+            txt.insert("end", f"  {label:<22}", tag)
+            txt.insert("end", desc + "\n")
+        def body(t): txt.insert("end", t + "\n")
+        def blank(): txt.insert("end", "\n")
+
+        h1("NMEA/GNSS Parser — User Manual")
+        blank()
+
+        h2("HOW TO USE")
+        sep()
+        body("  1. Click  Abrir…  to select an NMEA log file (.nmea / .txt / .log)")
+        body("  2. Optionally select an output folder with  Pasta…")
+        body("  3. Check  Incluir fixes inválidos  to also export quality=0 fixes")
+        body("  4. Click  ▶ Processar  to run the analysis")
+        body("  5. After processing,  🌍 Abrir no Google Earth  opens the KML track")
+        blank()
+
+        h2("FILE INFORMATION")
+        sep()
+        line("File",     "Name of the NMEA file processed")
+        line("Start",    "UTC timestamp of the first valid position fix")
+        line("End",      "UTC timestamp of the last valid position fix")
+        line("Duration", "Total recording duration  (hh:mm:ss)")
+        blank()
+
+        h2("SENTENCES")
+        sep()
+        line("Total parsed",  "Total NMEA sentences read from the file")
+        line("Bad checksum",  "Sentences with invalid checksum — corrupted or truncated;\n"
+                              "                       discarded, not used in analysis")
+        line("GGA",           "Global Positioning System Fix Data\n"
+                              "                       provides position, quality and altitude")
+        line("RMC",           "Recommended Minimum Navigation\n"
+                              "                       provides position, speed, heading and date")
+        line("VTG",           "Track Made Good and Ground Speed")
+        line("ZDA",           "Time & Date — used for PPS timing analysis")
+        blank()
+
+        h2("POSITION FIXES")
+        sep()
+        line("Total",    "All fixes found (valid + invalid)")
+        line("Valid",    "Fixes with quality > 0 and RMC valid flag\n"
+                         "                       used for all navigation calculations")
+        line("Invalid",  "Fixes with quality = 0 or flagged invalid by receiver")
+        blank()
+        body("  Fix quality types:")
+        txt.insert("end", "    [0] No fix     ", "fail")
+        body(": no satellite lock — position unreliable")
+        txt.insert("end", "    [1] GPS        ", "key")
+        body(": standard autonomous GPS fix")
+        txt.insert("end", "    [2] DGPS       ", "key")
+        body(": Differential GPS — corrected by ground reference station")
+        txt.insert("end", "    [4] RTK Fixed  ", "ok")
+        body(": Real-Time Kinematic, fixed solution — centimetre-level accuracy")
+        txt.insert("end", "    [5] RTK Float  ", "warn")
+        body(": RTK floating ambiguity — decimetre-level accuracy")
+        blank()
+
+        h2("NAVIGATION")
+        sep()
+        line("Distance",  "Total distance travelled in nautical miles (nm) and km")
+        line("Avg speed", "Average speed over ground, in knots (kts)")
+        line("Max speed", "Maximum instantaneous speed recorded, in knots (kts)")
+        blank()
+
+        h2("QUALITY")
+        sep()
+        body("  HDOP — Horizontal Dilution of Precision")
+        body("  Measures how satellite geometry affects horizontal accuracy.")
+        body("  Lower is better:")
+        txt.insert("end", "    Ideal     ≤ 1.0  ", "ok")
+        body(": optimal satellite geometry")
+        txt.insert("end", "    Excellent ≤ 2.0  ", "ok")
+        body(": suitable for all positioning applications")
+        txt.insert("end", "    Good      ≤ 5.0  ", "ok")
+        body(": reliable for general navigation")
+        txt.insert("end", "    Moderate  ≤ 10.0 ", "warn")
+        body(": marginal for precise work")
+        txt.insert("end", "    Poor      > 10.0 ", "fail")
+        body(": unreliable — check satellite visibility")
+        blank()
+        line("Avg HDOP",   "Mean HDOP over the entire session")
+        line("Max HDOP",   "Worst HDOP recorded during the session")
+        line("Alt range",  "Altitude span from minimum to maximum, in metres above MSL")
+        blank()
+
+        h2("TIMING / PPS ANALYSIS  (ZDA)")
+        sep()
+        body("  Uses ZDA sentences to assess timing integrity and infer PPS lock.")
+        body("  A GPS receiver with PPS active emits exactly one ZDA per second")
+        body("  (1.000 s intervals). Any deviation indicates timing instability.")
+        blank()
+        body("  PPS lock status:")
+        txt.insert("end", "    [OK]   LOCKED   ", "ok")
+        body(": ≥95% of intervals within ±10ms of 1.000s — timing stable")
+        txt.insert("end", "    [WARN] DEGRADED  ", "warn")
+        body(": 75–94% within ±10ms — minor instability")
+        txt.insert("end", "    [FAIL] UNLOCKED  ", "fail")
+        body(": <75% within ±10ms — PPS not reliable")
+        blank()
+        line("ZDA sentences",    "ZDA messages received during the session")
+        line("Expected",         "Expected count based on session duration (~1/second)")
+        line("Uptime",           "Percentage of expected ZDA messages actually received")
+        line("Locked intervals", "Percentage of 1-second intervals within ±10ms of 1.000s")
+        line("Avg deviation",    "Average timing error in milliseconds")
+        line("Max deviation",    "Worst single timing error recorded in milliseconds")
+        blank()
+        body("  Timing events (failures reported with date, time and duration):")
+        txt.insert("end", "    [GAP]      ", "fail")
+        body(": ZDA messages missing for >1.5s — possible signal loss\n"
+             "               shows start timestamp, end timestamp and outage duration")
+        txt.insert("end", "    [JUMP FWD] ", "warn")
+        body(": time jumped forward >60s — possible receiver reset or UTC step")
+        txt.insert("end", "    [JUMP BWD] ", "warn")
+        body(": time went backwards — clock correction or data corruption")
+        blank()
+
+        txt.configure(state="disabled")
+        txt.see("1.0")
+
+        w, h = 680, 560
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        win.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
 
     def _browse_input(self):
         path = filedialog.askopenfilename(

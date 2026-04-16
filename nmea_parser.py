@@ -565,6 +565,18 @@ def export_kml(fixes: list[Fix], output_path: Path, name: str = "GNSS Track"):
 # Report printer
 # ---------------------------------------------------------------------------
 
+def _fmt_duration(seconds: float) -> str:
+    """Formats a duration in seconds to a human-readable string (e.g. '10m 03s')."""
+    total = int(abs(seconds))
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    if h > 0:
+        return f"{h}h {m:02d}m {s:02d}s"
+    if m > 0:
+        return f"{m}m {s:02d}s"
+    return f"{seconds:.3f}s"
+
+
 def hdop_label(hdop: float) -> str:
     if hdop <= 1.0:   return "Ideal"
     if hdop <= 2.0:   return "Excellent"
@@ -650,9 +662,10 @@ def print_report(stats: dict, parse_stats: dict, timing: dict, input_file: Path,
             print(f"\n  Timing events detected: {len(gaps)}  (missed cycles: {missed})")
             for g in gaps:
                 kind_label = {"gap": "GAP", "forward_jump": "JUMP FWD", "backward_jump": "JUMP BWD"}.get(g.kind, g.kind)
-                print(f"    [{kind_label}] {g.start.strftime('%H:%M:%S')} → {g.end.strftime('%H:%M:%S')}"
-                      f"  ({g.duration_s:.3f}s"
-                      + (f", {g.missed_cycles} missed" if g.missed_cycles else "") + ")")
+                dur = _fmt_duration(abs(g.duration_s))
+                missed_str = f", {g.missed_cycles} missed cycles" if g.missed_cycles else ""
+                print(f"    [{kind_label}] {g.start.strftime('%Y-%m-%d %H:%M:%S')} → {g.end.strftime('%H:%M:%S')}"
+                      f"  (duration: {dur}{missed_str})")
         else:
             print(f"\n  No timing gaps detected.")
 
