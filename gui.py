@@ -86,8 +86,8 @@ class FloatIndicator(tk.Toplevel):
         inner = tk.Frame(self, bg=BG3, padx=12, pady=8)
         inner.pack(fill="both", expand=True, padx=1, pady=1)
 
-        self._status_var = tk.StringVar(value="● —")
-        self._detail_var = tk.StringVar(value="—  —")
+        self._status_var = tk.StringVar(value="● INACTIVE")
+        self._detail_var = tk.StringVar(value="no data")
 
         self._status_lbl = tk.Label(inner, textvariable=self._status_var,
                                     font=FONT_BOLD, bg=BG3, fg=FG_DIM)
