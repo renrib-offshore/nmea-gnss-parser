@@ -107,26 +107,33 @@ class FloatIndicator(tk.Toplevel):
         inner.bind("<ButtonPress-1>", self._drag_start)
         inner.bind("<B1-Motion>",     self._drag_move)
 
-        self._status_var = tk.StringVar(value="● INACTIVE")
+        self._pps_var    = tk.StringVar(value="PPS  ● INACTIVE")
+        self._sig_var    = tk.StringVar(value="SIG  ● —")
         self._detail_var = tk.StringVar(value="no data")
 
-        self._status_lbl = tk.Label(inner, textvariable=self._status_var,
-                                    font=FONT_BOLD, bg=BG3, fg=FG, anchor="w")
-        self._status_lbl.pack(fill="x")
-        self._status_lbl.bind("<ButtonPress-1>", self._drag_start)
-        self._status_lbl.bind("<B1-Motion>",     self._drag_move)
+        self._pps_lbl = tk.Label(inner, textvariable=self._pps_var,
+                                 font=FONT_BOLD, bg=BG3, fg=FG, anchor="w")
+        self._pps_lbl.pack(fill="x")
+        self._pps_lbl.bind("<ButtonPress-1>", self._drag_start)
+        self._pps_lbl.bind("<B1-Motion>",     self._drag_move)
+
+        self._sig_lbl = tk.Label(inner, textvariable=self._sig_var,
+                                 font=FONT_BOLD, bg=BG3, fg=FG, anchor="w")
+        self._sig_lbl.pack(fill="x")
+        self._sig_lbl.bind("<ButtonPress-1>", self._drag_start)
+        self._sig_lbl.bind("<B1-Motion>",     self._drag_move)
 
         self._detail_lbl = tk.Label(inner, textvariable=self._detail_var,
-                                    font=("Segoe UI", 9), bg=BG3, fg=FG, anchor="w")
+                                    font=("Segoe UI", 9), bg=BG3, fg=FG_DIM, anchor="w")
         self._detail_lbl.pack(fill="x")
         self._detail_lbl.bind("<ButtonPress-1>", self._drag_start)
         self._detail_lbl.bind("<B1-Motion>",     self._drag_move)
 
         # ── Position relative to parent window ──────────────────────────────
         master.update_idletasks()
-        x = master.winfo_x() + master.winfo_width() - 165
+        x = master.winfo_x() + master.winfo_width() - 175
         y = master.winfo_y() + 10
-        self.geometry(f"155x82+{x}+{y}")
+        self.geometry(f"165x98+{x}+{y}")
         self.update_idletasks()   # ensure content is rendered before showing
 
     # ── Drag ────────────────────────────────────────────────────────────────
@@ -145,13 +152,26 @@ class FloatIndicator(tk.Toplevel):
 
     # ── Status update ────────────────────────────────────────────────────────
 
-    def update_status(self, pps: str, quality: int, satellites: int):
-        colors = {"LOCKED": GREEN, "DEGRADED": YELLOW, "UNLOCKED": RED}
-        color = colors.get(pps, FG)
-        self._status_var.set(f"● {pps}")
-        self._detail_var.set("no data" if pps == "INACTIVE" else f"Q{quality}  {satellites} sat")
-        self._status_lbl.configure(fg=color)
-        self._detail_lbl.configure(fg=color)
+    def update_status(self, pps: str, signal: str, quality: int, satellites: int):
+        """
+        pps    : LOCKED | DEGRADED | UNLOCKED | INACTIVE
+        signal : OK | LOSS | INACTIVE
+        """
+        pps_colors = {"LOCKED": GREEN, "DEGRADED": YELLOW, "UNLOCKED": RED}
+        sig_colors = {"OK": GREEN, "LOSS": RED}
+
+        pps_color = pps_colors.get(pps, FG)
+        sig_color = sig_colors.get(signal, FG_DIM)
+
+        self._pps_var.set(f"PPS  ● {pps}")
+        self._sig_var.set(f"SIG  ● {signal}")
+        self._pps_lbl.configure(fg=pps_color)
+        self._sig_lbl.configure(fg=sig_color)
+
+        if pps == "INACTIVE":
+            self._detail_var.set("no data")
+        else:
+            self._detail_var.set(f"Q{quality}  {satellites} sat")
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +205,7 @@ class App(tk.Tk):
         self._live_quality: int = 0
         self._live_satellites: int = 0
         self._last_zda_time: float = 0.0
+        self._last_gga_time: float = 0.0
         self._float_win: FloatIndicator | None = None
 
         self._build_ui()
@@ -605,6 +626,7 @@ class App(tk.Tk):
         self._live_rmc.clear()
         self._live_vtg.clear()
         self._live_prev_time = ""
+        self._last_gga_time = 0.0
 
         self.conn_btn.configure(text="⬤  Disconnect", bg=RED, fg=BG)
         self._live_log_event(f"[{_now()}]  Listening on UDP port {port}…")
@@ -624,13 +646,14 @@ class App(tk.Tk):
         if self._live_log_file:
             self._close_log()
         self._last_zda_time = 0.0
+        self._last_gga_time = 0.0
         self.conn_btn.configure(text="⬤  Connect", bg=GREEN, fg=BG)
         self._live_log_event(f"[{_now()}]  Disconnected.")
         # Reset live display and floating indicator
         self.lv_pps.set("—")
         self._lv_pps_lbl.configure(fg=TEAL)
         if self._float_win and self._float_win.winfo_exists():
-            self._float_win.update_status("INACTIVE", 0, 0)
+            self._float_win.update_status("INACTIVE", "INACTIVE", 0, 0)
 
     def _udp_reader(self):
         """Daemon thread — reads UDP packets and queues NMEA lines."""
@@ -656,14 +679,29 @@ class App(tk.Tk):
         except queue.Empty:
             pass
 
+        now = time.time()
+
         # ZDA timeout: if no ZDA for >5s, force PPS UNLOCKED
+        pps_status = None
         if (self._live_running and self._last_zda_time > 0
-                and time.time() - self._last_zda_time > 5.0):
+                and now - self._last_zda_time > 5.0):
+            pps_status = "UNLOCKED"
             self.lv_pps.set("UNLOCKED")
             self._lv_pps_lbl.configure(fg=RED)
-            if self._float_win and self._float_win.winfo_exists():
-                self._float_win.update_status(
-                    "UNLOCKED", self._live_quality, self._live_satellites)
+
+        # GGA timeout: if no valid position for >5s, flag signal loss
+        sig_status = None
+        if self._live_running and self._last_gga_time > 0:
+            sig_status = "LOSS" if now - self._last_gga_time > 5.0 else "OK"
+
+        # Push combined state to floating indicator
+        if (self._float_win and self._float_win.winfo_exists()
+                and (pps_status or sig_status)):
+            self._float_win.update_status(
+                pps_status or self.lv_pps.get(),
+                sig_status or "OK",
+                self._live_quality,
+                self._live_satellites)
 
         if self._live_running:
             self.after(100, self._poll_live_queue)
@@ -729,6 +767,7 @@ class App(tk.Tk):
 
         self._live_quality    = q
         self._live_satellites = sats
+        self._last_gga_time   = time.time()
 
         self.lv_lat.set(f"{lat:.8f}°")
         self.lv_lon.set(f"{lon:.8f}°")
@@ -766,7 +805,10 @@ class App(tk.Tk):
         self.lv_uptime.set(f"{uptime:.1f}%")
 
         if self._float_win and self._float_win.winfo_exists():
-            self._float_win.update_status(pps, self._live_quality, self._live_satellites)
+            now = time.time()
+            sig = ("LOSS" if (self._last_gga_time > 0 and now - self._last_gga_time > 5.0)
+                   else ("OK" if self._last_gga_time > 0 else "—"))
+            self._float_win.update_status(pps, sig, self._live_quality, self._live_satellites)
 
     # -----------------------------------------------------------------------
     # Live Monitor — log file
@@ -1027,9 +1069,14 @@ class App(tk.Tk):
         body("  Compact overlay that stays on top of all other applications.")
         body("  Can be dragged freely to any position on screen.")
         blank()
+        body("  PPS line — timing integrity from ZDA sentences:")
         txt.insert("end", "    Green  ", "ok");   body("— LOCKED   : PPS stable, timing reliable")
         txt.insert("end", "    Yellow ", "warn"); body("— DEGRADED : minor instability, monitor closely")
         txt.insert("end", "    Red    ", "fail"); body("— UNLOCKED : PPS not reliable, check receiver")
+        blank()
+        body("  SIG line — position data availability (GGA):")
+        txt.insert("end", "    Green  ", "ok");   body("— OK   : GGA received within last 5 seconds")
+        txt.insert("end", "    Red    ", "fail"); body("— LOSS : no position data for >5 seconds")
         blank()
         body("  Also shows fix quality code (Q0–Q5) and number of active satellites.")
         blank()
