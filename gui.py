@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 from collections import deque
 from datetime import datetime
@@ -120,9 +121,9 @@ class FloatIndicator(tk.Toplevel):
 
     def update_status(self, pps: str, quality: int, satellites: int):
         colors = {"LOCKED": GREEN, "DEGRADED": YELLOW, "UNLOCKED": RED}
-        color = colors.get(pps, FG_DIM)
+        color = colors.get(pps, FG)
         self._status_var.set(f"● {pps}")
-        self._detail_var.set(f"Q{quality}  {satellites} sat")
+        self._detail_var.set("no data" if pps == "INACTIVE" else f"Q{quality}  {satellites} sat")
         self._status_lbl.configure(fg=color)
         self._detail_lbl.configure(fg=color)
 
@@ -157,6 +158,7 @@ class App(tk.Tk):
         self._live_sentence_count = 0
         self._live_quality: int = 0
         self._live_satellites: int = 0
+        self._last_zda_time: float = 0.0
         self._float_win: FloatIndicator | None = None
 
         self._build_ui()
@@ -595,8 +597,14 @@ class App(tk.Tk):
             self._udp_socket = None
         if self._live_log_file:
             self._close_log()
+        self._last_zda_time = 0.0
         self.conn_btn.configure(text="⬤  Connect", bg=GREEN, fg=BG)
         self._live_log_event(f"[{_now()}]  Disconnected.")
+        # Reset live display and floating indicator
+        self.lv_pps.set("—")
+        self._lv_pps_lbl.configure(fg=TEAL)
+        if self._float_win and self._float_win.winfo_exists():
+            self._float_win.update_status("INACTIVE", 0, 0)
 
     def _udp_reader(self):
         """Daemon thread — reads UDP packets and queues NMEA lines."""
@@ -621,6 +629,16 @@ class App(tk.Tk):
                 self._process_live_sentence(line)
         except queue.Empty:
             pass
+
+        # ZDA timeout: if no ZDA for >5s, force PPS UNLOCKED
+        if (self._live_running and self._last_zda_time > 0
+                and time.time() - self._last_zda_time > 5.0):
+            self.lv_pps.set("UNLOCKED")
+            self._lv_pps_lbl.configure(fg=RED)
+            if self._float_win and self._float_win.winfo_exists():
+                self._float_win.update_status(
+                    "UNLOCKED", self._live_quality, self._live_satellites)
+
         if self._live_running:
             self.after(100, self._poll_live_queue)
 
@@ -663,6 +681,7 @@ class App(tk.Tk):
             try:
                 ts = build_zda_timestamp(fields[1], fields[2], fields[3], fields[4])
                 if ts:
+                    self._last_zda_time = time.time()
                     self._live_zda_buf.append(ZDAEvent(timestamp=ts))
                     self._update_pps_live()
             except (IndexError, ValueError):

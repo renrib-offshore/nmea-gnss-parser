@@ -244,6 +244,10 @@ class SimulatorApp(tk.Tk):
         tf.pack(fill="x")
         tk.Label(tf, text="NMEA Simulator", font=FONT_H1,
                  bg=BG, fg=MAUVE).pack(side="left")
+        tk.Button(tf, text="?  Help", font=FONT_UI,
+                  bg=BG3, fg=MAUVE, activebackground=BORDER,
+                  relief="flat", padx=12, pady=4, cursor="hand2",
+                  command=self._show_help).pack(side="right")
 
         # ── Connection row ───────────────────────────────────────────────────
         conn = tk.Frame(self, bg=BG, padx=12, pady=4)
@@ -510,6 +514,115 @@ class SimulatorApp(tk.Tk):
         self.log_txt.configure(state="disabled")
 
     # -----------------------------------------------------------------------
+
+    def _show_help(self):
+        win = tk.Toplevel(self)
+        win.title("NMEA Simulator — Help")
+        win.configure(bg=BG)
+        win.resizable(True, True)
+        win.minsize(560, 460)
+
+        frame = tk.Frame(win, bg=BG, padx=14, pady=10)
+        frame.pack(fill="both", expand=True)
+
+        txt = tk.Text(frame, font=FONT_MONO, bg=BG2, fg=FG,
+                      relief="flat", bd=0, wrap="word", state="normal")
+        txt.pack(side="left", fill="both", expand=True)
+
+        sb = ttk.Scrollbar(frame, orient="vertical", command=txt.yview)
+        sb.pack(side="right", fill="y")
+        txt.configure(yscrollcommand=sb.set)
+
+        txt.tag_configure("h1",   foreground=MAUVE, font=("Segoe UI", 11, "bold"))
+        txt.tag_configure("h2",   foreground=BLUE,  font=("Segoe UI", 10, "bold"))
+        txt.tag_configure("key",  foreground=TEAL)
+        txt.tag_configure("ok",   foreground=GREEN)
+        txt.tag_configure("warn", foreground=YELLOW)
+        txt.tag_configure("fail", foreground=RED)
+        txt.tag_configure("dim",  foreground=FG_DIM)
+
+        def h1(t):   txt.insert("end", t + "\n", "h1")
+        def h2(t):   txt.insert("end", t + "\n", "h2")
+        def sep():   txt.insert("end", "─" * 60 + "\n", "dim")
+        def line(label, desc):
+            txt.insert("end", f"  {label:<24}", "key")
+            txt.insert("end", desc + "\n")
+        def body(t): txt.insert("end", t + "\n")
+        def blank():  txt.insert("end", "\n")
+
+        h1("NMEA Simulator — User Manual")
+        blank()
+
+        h2("HOW TO USE")
+        sep()
+        body("  1. Set Target IP and Port to match the NMEA Parser (default: 127.0.0.1:10110)")
+        body("  2. Open the NMEA Parser → Live Monitor tab → click Connect")
+        body("  3. Click  ▶ Start  — sentences begin flowing at 1 Hz")
+        body("  4. Select a scenario and inject faults as needed")
+        body("  5. Click  ■ Stop  to end the simulation")
+        blank()
+        body("  The parser's  Log to file  option can record all sentences")
+        body("  generated here for later analysis in the File Analysis tab.")
+        blank()
+
+        h2("SCENARIOS")
+        sep()
+        line("Vessel (moving, GPS)",   "Vessel underway at 5 kts, heading 045°, North Sea\n"
+                                       "                         GGA quality 1 (GPS), 9 satellites, HDOP 1.2")
+        blank()
+        line("Static (fixed, DGPS)",   "Fixed receiver on land or anchored\n"
+                                       "                         GGA quality 2 (DGPS), 11 satellites, HDOP 0.9")
+        blank()
+        line("RTK Survey (RTK Fixed)", "Precision survey mode, vessel moving at 1.5 kts\n"
+                                       "                         GGA quality 4 (RTK Fixed), 14 sats, HDOP 0.7")
+        blank()
+
+        h2("INJECTABLE FAULTS")
+        sep()
+        body("  Click a fault button to activate it. Click again to cancel early.")
+        body("  Timed faults deactivate automatically. Pulse faults fire once.")
+        blank()
+
+        txt.insert("end", "  PPS Loss  [30s]       ", "fail")
+        body(": Stops sending ZDA sentences for 30 seconds.\n"
+             "                         Parser detects no ZDA → PPS status → UNLOCKED (red).\n"
+             "                         Simulates loss of PPS signal from GNSS receiver.")
+        blank()
+        txt.insert("end", "  Signal Loss  [15s]    ", "fail")
+        body(": Sets GGA quality=0, satellites=0, HDOP=99.9.\n"
+             "                         Stops sending RMC and VTG.\n"
+             "                         Simulates complete loss of satellite lock.")
+        blank()
+        txt.insert("end", "  HDOP Spike  [20s]     ", "warn")
+        body(": Reduces satellite count by 4–6, raises HDOP to 7–12.\n"
+             "                         Simulates obstruction (crane, platform structure, coastline).")
+        blank()
+        txt.insert("end", "  Fix Downgrade  [20s]  ", "warn")
+        body(": Forces fix quality down to GPS (1), even in RTK scenario.\n"
+             "                         Simulates loss of RTK correction link.")
+        blank()
+        txt.insert("end", "  Time Jump +90s  [pulse]", "warn")
+        body(": Sends one ZDA with time jumped forward 90 seconds.\n"
+             "                         Parser detects a forward jump event.")
+        blank()
+        txt.insert("end", "  Time Jump −5s  [pulse] ", "warn")
+        body(": Sends one ZDA with time jumped backward 5 seconds.\n"
+             "                         Parser detects a backward jump event.")
+        blank()
+
+        h2("LIVE POSITION")
+        sep()
+        body("  Shows the current simulated latitude and longitude,")
+        body("  updated every 0.5 seconds. Position advances based on")
+        body("  the active scenario's speed and heading.")
+        blank()
+
+        txt.configure(state="disabled")
+        txt.see("1.0")
+
+        w, h = 640, 520
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        win.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
 
     def _center(self):
         self.update_idletasks()
