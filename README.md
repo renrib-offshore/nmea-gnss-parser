@@ -38,9 +38,16 @@ Supports post-processing of recorded logs and real-time monitoring over a serial
 - Works on multi-monitor setups
 
 ### Simulator
-- Generates realistic NMEA streams in real time (1 Hz)
-- Fault injection: **PPS outage**, **timestamp jump forward/backward**, **signal loss**
-- Configurable position noise and drift
+- Generates realistic NMEA streams in real time (1 Hz) over UDP
+- Three scenarios: **Vessel (moving, GPS)**, **Static (fixed, DGPS)**, **RTK Survey (RTK Fixed)**
+- Fault injection panel:
+  - **PPS Loss** — stops ZDA for 30s, triggering PPS UNLOCKED
+  - **Signal Loss** — sends GGA quality=0 for 15s
+  - **HDOP Spike** — injects degraded geometry for 20s
+  - **Fix Downgrade** — drops fix quality for 20s
+  - **Time Jump +90s / −5s** — pulse forward/backward timestamp anomaly
+- Event log shows each injected fault with timestamp
+- Designed to validate the Live Monitor and file analysis under real-world failure conditions
 
 ---
 
@@ -57,6 +64,10 @@ Supports post-processing of recorded logs and real-time monitoring over a serial
 > *GUI — Live Monitor tab*
 
 ![Live Monitor](docs/screenshot_live.png)
+
+> *NMEA Simulator — fault injection panel*
+
+![Simulator](docs/screenshot_simulator.png)
 
 ---
 
