@@ -301,6 +301,13 @@ class App(tk.Tk):
             state="disabled", command=self._open_kml)
         self.earth_btn.pack(side="left", padx=(0, 8))
 
+        self.export_btn = tk.Button(
+            btn_frame, text="📄  Export Report", font=FONT_UI,
+            bg=BG3, fg=FG_DIM, activebackground=BORDER,
+            relief="flat", padx=12, pady=6, cursor="hand2",
+            state="disabled", command=self._export_report)
+        self.export_btn.pack(side="left", padx=(0, 8))
+
         tk.Button(btn_frame, text="Clear", font=FONT_UI,
                   bg=BG3, fg=FG_DIM, activebackground=BORDER,
                   relief="flat", padx=12, pady=6, cursor="hand2",
@@ -469,6 +476,7 @@ class App(tk.Tk):
         self.uptime_var.set("Uptime GPS: —")
         self._kml_path = None
         self.earth_btn.configure(state="disabled", fg=FG_DIM)
+        self.export_btn.configure(state="disabled", fg=FG_DIM)
 
     def _run(self):
         if self._running:
@@ -535,6 +543,31 @@ class App(tk.Tk):
         self._running = False
         self.run_btn.configure(state="normal", text="▶  Process")
 
+    def _export_report(self):
+        content = self.text.get("1.0", "end").strip()
+        if not content:
+            messagebox.showwarning("Warning", "No report to export.")
+            return
+        default_name = ""
+        if self.input_var.get():
+            default_name = Path(self.input_var.get()).stem + "_report"
+        path = filedialog.asksaveasfilename(
+            title="Export Report",
+            initialfile=default_name,
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            Path(path).write_text(content, encoding="utf-8")
+        except OSError as e:
+            messagebox.showerror("Error", f"Could not save report:\n{e}")
+            return
+        try:
+            open_file(Path(path))
+        except Exception:
+            pass
+
     def _open_kml(self):
         if self._kml_path and self._kml_path.exists():
             try:
@@ -581,6 +614,7 @@ class App(tk.Tk):
 
         self._kml_path = kml_out
         self.earth_btn.configure(state="normal", fg=GREEN)
+        self.export_btn.configure(state="normal", fg=TEAL)
 
     def _set_pps_color(self, widget, color):
         try:
