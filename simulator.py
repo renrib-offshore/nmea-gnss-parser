@@ -436,7 +436,7 @@ class SimulatorApp(tk.Tk):
             return
 
         if fault_id in ("jump_forward", "jump_backward"):
-            self._state.inject_fault(fault_id, 0.5)
+            self._state.inject_fault(fault_id, None)  # no expiry — consumed by send loop
             label = "+90s forward" if fault_id == "jump_forward" else "−5s backward"
             self._log(f"Time jump injected: {label}", "warn")
         else:
