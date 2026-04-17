@@ -673,6 +673,104 @@ def print_report(stats: dict, parse_stats: dict, timing: dict, input_file: Path,
         else:
             print(f"\n  No timing gaps detected.")
 
+    # ── Analysis summary ────────────────────────────────────────────────────
+    print(f"\n{sep}")
+    print(f"  ANALYSIS SUMMARY")
+    print(f"{sep}")
+
+    findings: list[tuple[str, str]] = []   # (indicator, text)
+
+    # Data integrity
+    bad_cs  = parse_stats.get("skipped_checksum", 0)
+    total_s = parse_stats.get("total_sentences", 0)
+    if bad_cs == 0:
+        findings.append(("[OK]  ", f"No checksum errors ({total_s} sentences verified)"))
+    else:
+        findings.append(("[FAIL]", f"{bad_cs} bad checksum sentence(s) — data may be corrupted"))
+
+    # Timing integrity
+    if timing and timing.get("zda_count", 0) >= 2:
+        pps      = timing["pps_status"]
+        uptime   = timing.get("uptime_pct", 0.0)
+        gaps     = timing.get("gaps", [])
+        gap_evts = [g for g in gaps if g.kind == "gap"]
+        fwd_evts = [g for g in gaps if g.kind == "forward_jump"]
+        bwd_evts = [g for g in gaps if g.kind == "backward_jump"]
+        total_gap_s = sum(abs(g.duration_s) for g in gap_evts)
+
+        ind = {"LOCKED": "[OK]  ", "DEGRADED": "[WARN]", "UNLOCKED": "[FAIL]"}.get(pps, "[?]  ")
+        if uptime >= 95:
+            findings.append((ind, f"PPS uptime {uptime:.1f}% — timing stable throughout session"))
+        else:
+            absent_s = round((100 - uptime) / 100 * timing.get("expected_count", 0))
+            findings.append((ind, f"PPS uptime {uptime:.1f}% — signal absent ~{absent_s}s of session"))
+
+        # Classify gaps: "recovery gaps" immediately follow a backward/forward jump
+        # and are an expected artefact, not a true PPS outage.
+        recovery_indices = set()
+        for i in range(1, len(gaps)):
+            if gaps[i - 1].kind in ("backward_jump", "forward_jump") and gaps[i].kind == "gap":
+                recovery_indices.add(i)
+        true_outages = [g for i, g in enumerate(gap_evts)
+                        if i not in {j for j in recovery_indices if gaps[j].kind == "gap"}]
+        # Re-index: find which gap_evts are NOT recoveries
+        true_outages = [g for i, g in enumerate(gaps)
+                        if g.kind == "gap" and i not in recovery_indices]
+
+        if true_outages:
+            durations = " + ".join(f"{int(round(abs(g.duration_s)))}s" for g in true_outages)
+            findings.append(("[WARN]", f"{len(true_outages)} PPS outage(s) detected ({durations})"))
+        if fwd_evts:
+            findings.append(("[WARN]", f"{len(fwd_evts)} forward time jump(s) detected"))
+        if bwd_evts:
+            findings.append(("[WARN]", f"{len(bwd_evts)} backward time jump(s) detected"))
+        if not true_outages and not fwd_evts and not bwd_evts:
+            findings.append(("[OK]  ", "No timing events detected"))
+
+        locked_pct = timing.get("locked_pct", 0.0)
+        if locked_pct >= 95:
+            findings.append(("[OK]  ", f"Intervals within ±10ms when PPS active ({locked_pct:.1f}%)"))
+        else:
+            findings.append(("[WARN]", f"Only {locked_pct:.1f}% of intervals within ±10ms"))
+    else:
+        findings.append(("[WARN]", "Insufficient ZDA data for PPS timing analysis"))
+
+    # Position quality
+    if stats:
+        valid   = stats.get("valid_fixes", 0)
+        invalid = stats.get("invalid_fixes", 0)
+        total_f = valid + invalid
+        max_h   = stats.get("max_hdop", 0.0)
+        avg_h   = stats.get("avg_hdop", 0.0)
+
+        if max_h > 10:
+            findings.append(("[WARN]", f"HDOP exceeded 10.0 during session — peak {max_h:.2f} ({hdop_label(max_h)})"))
+        elif max_h > 5:
+            findings.append(("[WARN]", f"HDOP exceeded 5.0 during session — peak {max_h:.2f} ({hdop_label(max_h)})"))
+        else:
+            findings.append(("[OK]  ", f"HDOP within acceptable range throughout (max {max_h:.2f})"))
+
+        if invalid == 0:
+            findings.append(("[OK]  ", f"All {valid} position fix(es) valid"))
+        else:
+            pct = invalid / total_f * 100 if total_f else 0
+            findings.append(("[WARN]", f"{invalid} invalid fix(es) recorded ({pct:.1f}% of total)"))
+
+    # Overall assessment
+    has_fail = any(f[0].startswith("[FAIL]") for f in findings)
+    has_warn = any(f[0].startswith("[WARN]") for f in findings)
+    if has_fail:
+        overall_ind, overall_lbl = "[FAIL]", "ATTENTION REQUIRED"
+    elif has_warn:
+        overall_ind, overall_lbl = "[WARN]", "CAUTION"
+    else:
+        overall_ind, overall_lbl = "[OK]  ", "PASS"
+
+    print(f"  Overall assessment : {overall_ind} {overall_lbl}")
+    print()
+    for ind, text in findings:
+        print(f"    {ind} {text}")
+
     print(f"\n{sep}")
     print(f"  OUTPUT FILES")
     print(f"{sep}")
