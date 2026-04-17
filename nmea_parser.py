@@ -705,15 +705,15 @@ def print_report(stats: dict, parse_stats: dict, timing: dict, input_file: Path,
             absent_s = round((100 - uptime) / 100 * timing.get("expected_count", 0))
             findings.append((ind, f"PPS uptime {uptime:.1f}% — signal absent ~{absent_s}s of session"))
 
-        # Classify gaps: "recovery gaps" immediately follow a backward/forward jump
-        # and are an expected artefact, not a true PPS outage.
+        # Classify gaps: "recovery gaps" are short gaps (≤15s) that immediately
+        # follow a backward/forward jump — an expected artefact of the time correction.
+        # Genuine PPS outages are longer and must not be excluded.
         recovery_indices = set()
         for i in range(1, len(gaps)):
-            if gaps[i - 1].kind in ("backward_jump", "forward_jump") and gaps[i].kind == "gap":
+            if (gaps[i - 1].kind in ("backward_jump", "forward_jump")
+                    and gaps[i].kind == "gap"
+                    and abs(gaps[i].duration_s) <= 15):
                 recovery_indices.add(i)
-        true_outages = [g for i, g in enumerate(gap_evts)
-                        if i not in {j for j in recovery_indices if gaps[j].kind == "gap"}]
-        # Re-index: find which gap_evts are NOT recoveries
         true_outages = [g for i, g in enumerate(gaps)
                         if g.kind == "gap" and i not in recovery_indices]
 
