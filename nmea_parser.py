@@ -443,18 +443,22 @@ def analyze_timing(events: list[ZDAEvent]) -> dict:
     max_dev_ms  = max(deviations) * 1000
     locked_pct  = sum(1 for d in deviations if d <= TOLERANCE) / len(deviations) * 100
 
-    # PPS lock inference
-    if locked_pct >= 95 and max_dev_ms <= 50:
+    # Uptime: ZDA sentences received vs expected for the session duration
+    # (computed here so it feeds into PPS status below)
+    session_s = (events[-1].timestamp - events[0].timestamp).total_seconds()
+    expected_count = round(session_s) + 1
+    uptime_pct = min(len(events) / expected_count * 100, 100.0) if expected_count > 0 else 0.0
+
+    # PPS lock inference — both interval quality AND uptime must meet the threshold.
+    # A receiver with gaps (PPS absent) cannot be considered LOCKED even if the
+    # intervals that did arrive were perfect.
+    if locked_pct >= 95 and max_dev_ms <= 50 and uptime_pct >= 95:
         pps_status = "LOCKED"
-    elif locked_pct >= 75:
+    elif locked_pct >= 75 and uptime_pct >= 75:
         pps_status = "DEGRADED"
     else:
         pps_status = "UNLOCKED"
 
-    # Uptime: ZDA sentences received vs expected for the session duration
-    session_s = (events[-1].timestamp - events[0].timestamp).total_seconds()
-    expected_count = round(session_s) + 1
-    uptime_pct = min(len(events) / expected_count * 100, 100.0) if expected_count > 0 else 0.0
     missed_total = sum(g.missed_cycles for g in gaps)
 
     return {
