@@ -1,23 +1,103 @@
 # NMEA/GNSS Parser
 
-A professional NMEA 0183 log parser built in pure Python (no external dependencies).  
-Designed for marine, offshore, and survey applications.
+A professional NMEA 0183 log analyser and live monitor built in Python, designed for **marine, offshore, and survey applications**.
+
+Supports post-processing of recorded logs and real-time monitoring over a serial/TCP port — with PPS timing analysis, signal quality charts, and Google Earth export.
+
+---
 
 ## Features
 
-- Parses **GGA, RMC, VTG, GSA, ZDA** sentences
-- Validates NMEA checksums
-- Converts NMEA coordinates to decimal degrees
-- Calculates distance (nautical miles & km), speed, and duration
-- HDOP quality assessment
-- Fix quality breakdown (GPS, DGPS, RTK Fixed/Float)
-- Exports **CSV** (all fix data) and **KML** (track for Google Earth)
-- Clean terminal report
+### File Analysis
+- Parses **GGA, RMC, VTG, GSA, ZDA** sentences with full checksum validation
+- Fix quality breakdown: GPS, DGPS, RTK Fixed / Float
+- HDOP quality assessment (Excellent / Good / Moderate / Poor)
+- Distance (nautical miles & km), average/max speed, heading
+- **PPS timing analysis** from ZDA 1 Hz stream: interval quality, forward/backward jumps, gap detection, uptime percentage — classified as LOCKED / DEGRADED / UNLOCKED
+- **Analysis Summary** at report end: automatic PASS / CAUTION / ATTENTION flags for checksum errors, PPS uptime, timing jumps, HDOP thresholds, and fix validity
+- Exports **CSV** (all fix data) and **KML** (track + waypoints for Google Earth)
+- **Export Report** as plain-text `.txt`
+
+### Charts (post-processing)
+- HDOP over time with threshold reference lines
+- Fix quality timeline (colour-coded by quality code)
+- ZDA interval deviation — visual PPS jitter plot
+- Export charts as PNG
+
+### Live Monitor
+- Connect to any serial or TCP source streaming NMEA sentences
+- Live position, speed, heading, altitude, satellites, HDOP
+- Real-time HDOP mini-chart (rolling 60-fix window)
+- PPS lock status inferred from ZDA 1 Hz cadence
+- Signal loss detection from GGA quality field
+- Timing event log: gaps, forward/backward jumps flagged as they occur
+
+### Floating Indicator
+- Always-on-top compact overlay showing **PPS** and **SIG** status
+- Drag to reposition, ×-close button
+- Works on multi-monitor setups
+
+### Simulator
+- Generates realistic NMEA streams in real time (1 Hz)
+- Fault injection: **PPS outage**, **timestamp jump forward/backward**, **signal loss**
+- Configurable position noise and drift
+
+---
+
+## Screenshots
+
+> *GUI — File Analysis tab*
+
+![File Analysis](docs/screenshot_analysis.png)
+
+> *GUI — Charts tab*
+
+![Charts](docs/screenshot_charts.png)
+
+> *GUI — Live Monitor tab*
+
+![Live Monitor](docs/screenshot_live.png)
+
+---
+
+## Requirements
+
+```
+Python 3.10+
+tkinter      (usually bundled with Python)
+matplotlib   >= 3.7
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
 
 ## Usage
 
+### GUI
+
 ```bash
-python nmea_parser.py <file.nmea>
+python gui.py
+# or
+bash launch.sh
+```
+
+### Simulator (separate window)
+
+```bash
+python simulator.py
+# or
+bash launch_simulator.sh
+```
+
+### CLI (parser only, no GUI)
+
+```bash
+python nmea_parser.py survey.nmea
 
 # Custom output directory
 python nmea_parser.py survey.nmea --output ./results
@@ -26,50 +106,32 @@ python nmea_parser.py survey.nmea --output ./results
 python nmea_parser.py survey.nmea --include-invalid
 ```
 
-## Example Output
-
-```
-════════════════════════════════════════════════════════
-  NMEA/GNSS Parser — Report
-════════════════════════════════════════════════════════
-  File : sample.nmea
-  Start: 2026-04-15 12:00:00 UTC
-  End  : 2026-04-15 12:04:30 UTC
-  Duration: 00h 04m 30s
-
-  SENTENCES
-  ─────────────────────────────────────────────────────
-  Total parsed : 39  |  Bad checksum : 0
-  GGA: 10  |  RMC: 10  |  VTG: 9  |  ZDA: 10
-
-  POSITION FIXES
-  ─────────────────────────────────────────────────────
-  Total: 10  |  Valid: 9  |  Invalid: 1
-  [1] GPS: 7  |  [2] DGPS: 2  |  [5] RTK Float: 1
-
-  NAVIGATION
-  ─────────────────────────────────────────────────────
-  Distance  : 1.428 nm  (2.645 km)
-  Avg speed : 5.9 kts  |  Max speed: 6.5 kts
-
-  QUALITY
-  ─────────────────────────────────────────────────────
-  Avg HDOP : 1.01 (Excellent)  |  Max HDOP: 1.20
-  Alt range: 14.4 m — 15.4 m MSL
-════════════════════════════════════════════════════════
-```
-
-## Requirements
-
-- Python 3.10+
-- No third-party libraries required
+---
 
 ## Output Files
 
 | File | Description |
 |------|-------------|
-| `<name>_fixes.csv` | All fixes with coordinates, quality, speed, heading |
+| `<name>_fixes.csv` | All fixes with coordinates, quality, HDOP, speed, heading |
 | `<name>_track.kml` | Track + waypoints, opens in Google Earth |
+| `<name>_report.txt` | Full text report (via Export Report button) |
+
+---
+
+## Project Structure
+
+```
+nmea-gnss-parser/
+├── gui.py            # Main GUI application (tkinter)
+├── nmea_parser.py    # Core parser, timing analysis, KML/CSV export
+├── simulator.py      # NMEA stream simulator with fault injection
+├── launch.sh         # Shortcut to launch GUI
+├── launch_simulator.sh
+├── requirements.txt
+└── samples/          # Sample NMEA log files
+```
+
+---
 
 ## Author
 
