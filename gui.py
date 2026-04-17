@@ -19,6 +19,13 @@ from io import StringIO
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+import matplotlib
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+
 sys.path.insert(0, str(Path(__file__).parent))
 from nmea_parser import (
     ZDAEvent, analyze_timing, build_zda_timestamp,
@@ -189,6 +196,13 @@ class App(tk.Tk):
         # File analysis state
         self._kml_path: Path | None = None
         self._running = False
+        self._chart_fig: Figure | None = None
+        self._chart_canvas: FigureCanvasTkAgg | None = None
+
+        # Live chart state (rolling 60s HDOP)
+        self._live_hdop_buf: deque = deque(maxlen=60)   # (datetime, hdop)
+        self._live_chart_canvas: FigureCanvasTkAgg | None = None
+        self._live_chart_fig: Figure | None = None
 
         # Live monitor state
         self._udp_socket: socket.socket | None = None
@@ -237,13 +251,40 @@ class App(tk.Tk):
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
-        file_tab = tk.Frame(self.nb, bg=BG)
-        live_tab = tk.Frame(self.nb, bg=BG)
-        self.nb.add(file_tab, text="  File Analysis  ")
-        self.nb.add(live_tab, text="  Live Monitor  ")
+        file_tab   = tk.Frame(self.nb, bg=BG)
+        live_tab   = tk.Frame(self.nb, bg=BG)
+        charts_tab = tk.Frame(self.nb, bg=BG)
+        self.nb.add(file_tab,   text="  File Analysis  ")
+        self.nb.add(live_tab,   text="  Live Monitor  ")
+        self.nb.add(charts_tab, text="  Charts  ")
 
         self._build_file_tab(file_tab)
         self._build_live_tab(live_tab)
+        self._build_charts_tab(charts_tab)
+
+    # ── Charts tab ───────────────────────────────────────────────────────────
+
+    def _build_charts_tab(self, parent):
+        top = tk.Frame(parent, bg=BG, padx=12, pady=8)
+        top.pack(fill="x")
+
+        self.chart_export_btn = tk.Button(
+            top, text="🖼  Export Chart as PNG", font=FONT_UI,
+            bg=BG3, fg=FG_DIM, activebackground=BORDER,
+            relief="flat", padx=12, pady=5, cursor="hand2",
+            state="disabled", command=self._export_chart_png)
+        self.chart_export_btn.pack(side="left")
+
+        # Placeholder shown before any file is processed
+        self._chart_placeholder = tk.Label(
+            parent,
+            text="Process a file in File Analysis to see charts here.",
+            font=FONT_UI, bg=BG, fg=FG_DIM)
+        self._chart_placeholder.pack(expand=True)
+
+        # Frame where the matplotlib canvas will be placed
+        self._chart_frame = tk.Frame(parent, bg=BG)
+        self._chart_frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
     # ── File Analysis tab ────────────────────────────────────────────────────
 
@@ -437,6 +478,16 @@ class App(tk.Tk):
         self.lv_updated,  _          = field(ses, "Last update")
         self.lv_logfile,  _          = field(ses, "Log file")
 
+        # ── Live HDOP mini-chart ─────────────────────────────────────────────
+        chart_row = tk.Frame(parent, bg=BG, padx=12)
+        chart_row.pack(fill="x", pady=(0, 4))
+        tk.Label(chart_row, text="HDOP (last 60s)", font=("Segoe UI", 8),
+                 bg=BG, fg=FG_DIM).pack(anchor="w")
+        self._live_chart_frame = tk.Frame(chart_row, bg=BG2, height=80)
+        self._live_chart_frame.pack(fill="x")
+        self._live_chart_frame.pack_propagate(False)
+        self._build_live_chart()
+
         # Status log
         log_frame = tk.Frame(parent, bg=BG, padx=12)
         log_frame.pack(fill="both", expand=True, pady=(0, 8))
@@ -449,6 +500,185 @@ class App(tk.Tk):
         sb2 = ttk.Scrollbar(log_frame, orient="vertical", command=self.live_log.yview)
         sb2.pack(side="right", fill="y")
         self.live_log.configure(yscrollcommand=sb2.set)
+
+    # -----------------------------------------------------------------------
+    # Charts — post-processing
+    # -----------------------------------------------------------------------
+
+    # Matplotlib dark style matching the app palette
+    _MPL_STYLE = {
+        "figure.facecolor":  BG,
+        "axes.facecolor":    BG2,
+        "axes.edgecolor":    BORDER,
+        "axes.labelcolor":   FG_DIM,
+        "axes.grid":         True,
+        "grid.color":        BORDER,
+        "grid.linewidth":    0.5,
+        "xtick.color":       FG_DIM,
+        "ytick.color":       FG_DIM,
+        "text.color":        FG,
+        "lines.linewidth":   1.4,
+        "font.size":         8.5,
+    }
+
+    def _display_charts(self, fixes, zda_events, timing):
+        """Build the three-panel post-processing chart from parsed data."""
+        import matplotlib.ticker as mticker
+
+        # Clear previous chart
+        if self._chart_canvas:
+            self._chart_canvas.get_tk_widget().destroy()
+        for w in self._chart_frame.winfo_children():
+            w.destroy()
+        self._chart_placeholder.pack_forget()
+
+        with plt.rc_context(self._MPL_STYLE):
+            fig = Figure(figsize=(9, 6), dpi=96)
+            fig.subplots_adjust(hspace=0.08, left=0.07, right=0.97,
+                                top=0.93, bottom=0.09)
+
+            has_fixes = bool(fixes)
+            has_zda   = len(zda_events) >= 2
+
+            # ── Subplot 1: HDOP over time ────────────────────────────────────
+            ax1 = fig.add_subplot(3, 1, 1)
+            if has_fixes:
+                ts  = [f.timestamp for f in fixes if f.timestamp]
+                hdops = [f.hdop for f in fixes if f.timestamp]
+                ax1.plot(ts, hdops, color=TEAL, linewidth=1.4)
+                ax1.axhline(5,  color=YELLOW, linewidth=0.8, linestyle="--", alpha=0.7)
+                ax1.axhline(10, color=RED,    linewidth=0.8, linestyle="--", alpha=0.7)
+                ax1.set_ylim(bottom=0)
+                ax1.text(0.01, 0.92, "Poor (>10)",     transform=ax1.transAxes,
+                         color=RED,    fontsize=7, va="top")
+                ax1.text(0.01, 0.72, "Moderate (>5)",  transform=ax1.transAxes,
+                         color=YELLOW, fontsize=7, va="top")
+            ax1.set_ylabel("HDOP", color=FG_DIM)
+            ax1.set_title("HDOP · Fix Quality · PPS Deviation", color=FG, fontsize=9)
+            ax1.tick_params(labelbottom=False)
+
+            # ── Subplot 2: Fix quality over time ────────────────────────────
+            ax2 = fig.add_subplot(3, 1, 2, sharex=ax1)
+            Q_COLORS = {0: RED, 1: BLUE, 2: TEAL, 3: MAUVE, 4: GREEN, 5: YELLOW}
+            if has_fixes:
+                for q, color in Q_COLORS.items():
+                    pts = [(f.timestamp, f.quality) for f in fixes
+                           if f.timestamp and f.quality == q]
+                    if pts:
+                        xs, ys = zip(*pts)
+                        ax2.scatter(xs, ys, color=color, s=6, zorder=3, label=f"Q{q}")
+                ax2.set_ylim(-0.5, 5.5)
+                ax2.set_yticks([0, 1, 2, 3, 4, 5])
+                ax2.yaxis.set_major_formatter(
+                    mticker.FuncFormatter(lambda v, _: f"Q{int(v)}"))
+                ax2.legend(loc="upper right", fontsize=7, framealpha=0.3,
+                           labelcolor=FG, facecolor=BG3)
+            ax2.set_ylabel("Fix Quality", color=FG_DIM)
+            ax2.tick_params(labelbottom=False)
+
+            # ── Subplot 3: PPS deviation over time ───────────────────────────
+            ax3 = fig.add_subplot(3, 1, 3, sharex=ax1)
+            if has_zda:
+                zda_ts   = [zda_events[i].timestamp for i in range(1, len(zda_events))]
+                intervals = [(zda_events[i].timestamp - zda_events[i-1].timestamp
+                              ).total_seconds() for i in range(1, len(zda_events))]
+                # Only plot "normal" intervals (0.5–1.5s) as deviation; mask jumps/gaps
+                dev_ts  = [t for t, iv in zip(zda_ts, intervals) if 0.5 <= iv <= 1.5]
+                dev_ms  = [abs(iv - 1.0) * 1000 for iv in intervals if 0.5 <= iv <= 1.5]
+                if dev_ts:
+                    ax3.fill_between(dev_ts, dev_ms, color=MAUVE, alpha=0.6, linewidth=0)
+                    ax3.plot(dev_ts, dev_ms, color=MAUVE, linewidth=0.8)
+                ax3.axhline(10, color=RED, linewidth=0.8, linestyle="--", alpha=0.7)
+                ax3.set_ylim(bottom=0)
+                # Shade gap periods
+                gaps = timing.get("gaps", []) if timing else []
+                for g in gaps:
+                    if g.kind == "gap":
+                        ax3.axvspan(g.start, g.end, color=RED, alpha=0.12)
+            ax3.set_ylabel("PPS dev (ms)", color=FG_DIM)
+            ax3.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+            fig.autofmt_xdate(rotation=30, ha="right")
+
+            canvas = FigureCanvasTkAgg(fig, master=self._chart_frame)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill="both", expand=True)
+
+            self._chart_fig    = fig
+            self._chart_canvas = canvas
+
+        self.chart_export_btn.configure(state="normal", fg=TEAL)
+
+    def _export_chart_png(self):
+        if not self._chart_fig:
+            return
+        default = ""
+        if self.input_var.get():
+            default = Path(self.input_var.get()).stem + "_chart"
+        path = filedialog.asksaveasfilename(
+            title="Export Chart",
+            initialfile=default,
+            defaultextension=".png",
+            filetypes=[("PNG image", "*.png"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            self._chart_fig.savefig(path, dpi=150, bbox_inches="tight",
+                                    facecolor=BG)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not save chart:\n{e}")
+            return
+        try:
+            open_file(Path(path))
+        except Exception:
+            pass
+
+    # -----------------------------------------------------------------------
+    # Charts — live HDOP mini-chart
+    # -----------------------------------------------------------------------
+
+    def _build_live_chart(self):
+        with plt.rc_context(self._MPL_STYLE):
+            fig = Figure(figsize=(6, 0.9), dpi=96)
+            fig.subplots_adjust(left=0.05, right=0.99, top=0.88, bottom=0.22)
+            ax = fig.add_subplot(1, 1, 1)
+            ax.set_ylim(0, 15)
+            ax.axhline(5,  color=YELLOW, linewidth=0.7, linestyle="--", alpha=0.6)
+            ax.axhline(10, color=RED,    linewidth=0.7, linestyle="--", alpha=0.6)
+            ax.tick_params(left=False, labelleft=False, labelbottom=False)
+            ax.set_facecolor(BG2)
+
+            canvas = FigureCanvasTkAgg(fig, master=self._live_chart_frame)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill="both", expand=True)
+
+            self._live_chart_fig    = fig
+            self._live_chart_ax     = ax
+            self._live_chart_canvas = canvas
+
+    def _update_live_chart(self):
+        """Redraws the rolling HDOP mini-chart. Called from _flush_live_fix."""
+        if not self._live_chart_canvas or len(self._live_hdop_buf) < 2:
+            return
+        ax = self._live_chart_ax
+        ax.cla()
+        ax.set_facecolor(BG2)
+        ax.set_ylim(0, max(15, max(h for _, h in self._live_hdop_buf) * 1.15))
+        ax.axhline(5,  color=YELLOW, linewidth=0.7, linestyle="--", alpha=0.6)
+        ax.axhline(10, color=RED,    linewidth=0.7, linestyle="--", alpha=0.6)
+        ax.tick_params(left=False, labelleft=False, labelbottom=False,
+                       bottom=False)
+
+        xs = [t for t, _ in self._live_hdop_buf]
+        ys = [h for _, h in self._live_hdop_buf]
+
+        # Color line by severity
+        for i in range(1, len(xs)):
+            h = ys[i]
+            c = RED if h > 10 else (YELLOW if h > 5 else TEAL)
+            ax.plot(xs[i-1:i+1], ys[i-1:i+1], color=c, linewidth=1.4)
+
+        ax.fill_between(xs, ys, color=TEAL, alpha=0.15)
+        self._live_chart_canvas.draw_idle()
 
     # -----------------------------------------------------------------------
     # File Analysis — actions
@@ -528,8 +758,10 @@ class App(tk.Tk):
                 report = buf.getvalue()
 
                 kml_result = kml_out if fixes else None
+                _fixes = fixes[:]
+                _zda   = zda_events[:]
                 self.after(0, lambda: self._display_report(
-                    report, stats, timing, kml_result))
+                    report, stats, timing, kml_result, _fixes, _zda))
 
             except Exception as e:
                 msg = str(e)
@@ -581,7 +813,8 @@ class App(tk.Tk):
     # File Analysis — report display
     # -----------------------------------------------------------------------
 
-    def _display_report(self, report: str, stats: dict, timing: dict, kml_out: Path):
+    def _display_report(self, report: str, stats: dict, timing: dict,
+                        kml_out: Path, fixes=None, zda_events=None):
         self._set_text("")
         for line in report.splitlines():
             if line.startswith("═") or line.startswith("─"):
@@ -615,6 +848,9 @@ class App(tk.Tk):
         self._kml_path = kml_out
         self.earth_btn.configure(state="normal", fg=GREEN)
         self.export_btn.configure(state="normal", fg=TEAL)
+
+        if fixes is not None or zda_events is not None:
+            self._display_charts(fixes or [], zda_events or [], timing)
 
     def _set_pps_color(self, widget, color):
         try:
@@ -684,6 +920,7 @@ class App(tk.Tk):
         self._last_zda_time = 0.0
         self._last_gga_time = 0.0
         self._logged_gap_count = 0
+        self._live_hdop_buf.clear()
         self.conn_btn.configure(text="⬤  Connect", bg=GREEN, fg=BG)
         self._live_log_event(f"[{_now()}]  Disconnected.")
         # Reset live display and floating indicator
@@ -820,6 +1057,10 @@ class App(tk.Tk):
         self.lv_hdop.set(f"{hdop:.2f}  ({hdop_label(hdop)})")
         self.lv_nmea_cnt.set(str(self._live_sentence_count))
         self.lv_updated.set(_now())
+
+        # Rolling HDOP for mini-chart
+        self._live_hdop_buf.append((datetime.utcnow(), hdop))
+        self._update_live_chart()
 
         self._live_gga.clear()
         self._live_rmc.clear()
