@@ -19,6 +19,7 @@ venv/
 # Arquivos de sistema
 .DS_Store
 Thumbs.db
+.~lock.*
 
 # IDEs
 .vscode/

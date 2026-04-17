@@ -528,6 +528,9 @@ class App(tk.Tk):
         # Clear previous chart
         if self._chart_canvas:
             self._chart_canvas.get_tk_widget().destroy()
+            plt.close(self._chart_fig)
+            self._chart_fig = None
+            self._chart_canvas = None
         for w in self._chart_frame.winfo_children():
             w.destroy()
         self._chart_placeholder.pack_forget()
@@ -707,6 +710,15 @@ class App(tk.Tk):
         self._kml_path = None
         self.earth_btn.configure(state="disabled", fg=FG_DIM)
         self.export_btn.configure(state="disabled", fg=FG_DIM)
+        self.chart_export_btn.configure(state="disabled", fg=FG_DIM)
+        if self._chart_canvas:
+            self._chart_canvas.get_tk_widget().destroy()
+            plt.close(self._chart_fig)
+            self._chart_fig = None
+            self._chart_canvas = None
+        for w in self._chart_frame.winfo_children():
+            w.destroy()
+        self._chart_placeholder.pack(expand=True)
 
     def _run(self):
         if self._running:
@@ -1037,8 +1049,10 @@ class App(tk.Tk):
         alt  = self._live_gga.get("altitude",   0.0)
         lat  = self._live_gga.get("lat",        0.0)
         lon  = self._live_gga.get("lon",        0.0)
-        spd  = self._live_vtg.get("speed_kts") or self._live_rmc.get("speed_kts", 0.0)
-        hdg  = self._live_vtg.get("heading")   or self._live_rmc.get("heading",   0.0)
+        _spd_vtg = self._live_vtg.get("speed_kts")
+        spd  = _spd_vtg if _spd_vtg is not None else self._live_rmc.get("speed_kts", 0.0)
+        _hdg_vtg = self._live_vtg.get("heading")
+        hdg  = _hdg_vtg if _hdg_vtg is not None else self._live_rmc.get("heading",   0.0)
 
         self._live_quality    = q
         self._live_satellites = sats
